@@ -1,0 +1,117 @@
+alias: New Heat management
+description: ""
+trigger:
+  - platform: template
+    # Watch the zone and helper entities; evaluate the template on changes
+    entity_id:
+      - zone.home
+      - zone.20km_zone
+      - input_boolean.home_pressence_detected
+      - switch.toggle_sleep_mode
+    value_template: >-
+      {{ (state_attr('zone.home','persons') | default([]) | length == 0)
+         or ((state_attr('zone.20km_zone','persons') | default([]) | length) > 0)
+         or is_state('input_boolean.home_pressence_detected','on')
+         or is_state('switch.toggle_sleep_mode','on') }}
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: switch.toggle_sleep_mode
+                state: "off"
+              - condition: state
+                entity_id: input_boolean.home_pressence_detected
+                state: "on"
+        sequence:
+          - action: climate.set_temperature
+            metadata: {}
+            data:
+              temperature: 22
+            target:
+              entity_id:
+                - climate.danfoss_etrv0100
+                - climate.danfoss_etrv0100_2
+                - climate.danfoss_etrv0100_3
+        # Action: power-set comfortable temperature on all target thermostats
+        alias: Set comfortable temperature
+
+      - conditions:
+          - condition: template
+            # True when any person is currently registered in the 20km zone
+            value_template: >-
+              {{ (state_attr('zone.20km_zone', 'persons') | default([])) | length > 0 }}
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: switch.toggle_sleep_mode
+                state: "off"
+              - condition: state
+                entity_id: input_boolean.home_pressence_detected
+                state: "off"
+        sequence:
+          - action: climate.set_temperature
+            metadata: {}
+            data:
+              temperature: 20
+            target:
+              entity_id:
+                - climate.danfoss_etrv0100_2
+                - climate.danfoss_etrv0100
+                - climate.danfoss_etrv0100_3
+        # Action: set idle temperature on all target thermostats
+        alias: Set idle temperature
+
+      - conditions:
+          - condition: state
+            entity_id: zone.home
+            attribute: persons
+            state: "0"
+          - condition: state
+            entity_id: zone.20km_zone
+            attribute: persons
+            state: "0"
+          - condition: state
+            entity_id: switch.toggle_sleep_mode
+            state: "off"
+          - condition: state
+            entity_id: input_boolean.home_pressence_detected
+            state: "off"
+        sequence:
+          - action: climate.set_temperature
+            metadata: {}
+            data:
+              temperature: 16
+            target:
+              entity_id:
+                - climate.danfoss_etrv0100_2
+                - climate.danfoss_etrv0100
+                - climate.danfoss_etrv0100_3
+        # Action: set low/away temperature on all target thermostats
+        alias: Set low temperature
+
+      - conditions:
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: input_boolean.home_pressence_detected
+                state: "on"
+              - condition: state
+                entity_id: switch.toggle_sleep_mode
+                state: "on"
+        sequence:
+          - action: climate.set_temperature
+            metadata: {}
+            data:
+              temperature: 19
+            target:
+              entity_id:
+                - climate.danfoss_etrv0100_2
+                - climate.danfoss_etrv0100
+                - climate.danfoss_etrv0100_3
+        # Action: set sleep temperature on all target thermostats
+        alias: Set sleep temperature
+
+mode: single
