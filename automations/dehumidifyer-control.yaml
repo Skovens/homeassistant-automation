@@ -1,136 +1,119 @@
- alias: Dehumidifier Control
- description: >
-   Turn off dehumidifier above 10°C. When 2..10°C, ensure it is on and set
-   humidity to a value (30..80%) linearly interpolated from outside temperature.
- # Trigger: runs whenever weather.forecast_home updates
- triggers:
-   - platform: state
-     entity_id: weather.forecast_home
- # Only run if temperature changed by >= 1°C
- conditions:
-   - condition: template
-     value_template: >-
-       {% set old = trigger.from_state.attributes.temperature | float(0) %}
-       {% set new = trigger.to_state.attributes.temperature | float(0) %}
-       {{ (old - new) | abs >= 1 }}
- # Main action block: choose branch based on outside temperature
- actions:
-   - choose:
-       # Branch 1: Turn off humidifier when outside temperature > 10°C
-       - alias: Turn off humidifier when outside temperature > 10°C
-         conditions:
-           # Condition: outside temperature above 10°C
-           - condition: template
-             value_template: >-
-               {{ state_attr('weather.forecast_home','temperature') | float(999)
-               > 10.0 }}
-         sequence:
-           # Step: Power off humidifier
-           - alias: Power off humidifier
-             target:
-               entity_id: humidifier.otto_dehumidifier_eeese_air_care
-             action: humidifier.turn_off
-             data: {}
-       # Branch 2: Ensure humidifier is on and set humidity when outside temperature is 2..10°C
-       - alias: >-
-           Ensure humidifier is on and set humidity when outside temperature is
-           between 2°C and 10°C
-         conditions:
-           # Condition: outside temperature between 2°C and 10°C
-           - condition: template
-             value_template: >-
-               {{ (state_attr('weather.forecast_home','temperature') |
-               float(-999) >= 2.0) and
-                   (state_attr('weather.forecast_home','temperature') | float(999) <= 10.0) }}
-           # Condition: only run if stored setpoint differs from outside temperature by >= 1°C
-           - condition: template
-             value_template: |-
-               {{ (states('input_number.dehumidifier_setpoint') | float(0) -
-                   ( state_attr('weather.forecast_home','temperature') | float(0) ) ) | abs >= 1 }}
-             alias: >-
-               Only proceed when the stored setpoint differs from outside
-               temperature by >= 1°C (prevents frequent small adjustments)
-         
-         sequence:
-           # Step 1: Compute desired humidity and capture child-lock state
-           - alias: Compute desired humidity and capture child-lock state
-             variables:
-               t: >-
-                 {{ state_attr('weather.forecast_home','temperature') | float(0)
-                 }}
-               t_min: 2
-               t_max: 10
-               h_min: 30
-               h_max: 80
-               desired_humidity: |-
-                 {% if t <= t_min %}
-                   {{ h_min | round(0) }}
-                 {% elif t >= t_max %}
-                   {{ h_max | round(0) }}
-                 {% else %}
-                   {% set slope = (h_max - h_min) / (t_max - t_min) %}
-                   {{ (h_min + slope * (t - t_min)) | round(0) }}
-                 {% endif %}
-               was_locked: >-
-                 {{
-                 is_state('switch.otto_dehumidifier_eeese_air_care_child_lock','on')
-                 }}
-           # Step 2: Ensure humidifier is powered on
-           - alias: Ensure humidifier is powered on
-             target:
-               entity_id: humidifier.otto_dehumidifier_eeese_air_care
-             action: humidifier.turn_on
-             data: {}
-           # Step 3: Wait for humidifier to report state 'on'
-           - alias: Wait for humidifier to report state 'on'
-             wait_for_trigger:
-               - entity_id: humidifier.otto_dehumidifier_eeese_air_care
-                 to: "on"
-                 trigger: state
-             timeout: "00:00:10"
-           # Step 4: If child lock was enabled, temporarily disable it
-           - choose:
-               - conditions:
-                   - condition: template
-                     value_template: "{{ was_locked | bool }}"
-                 alias: >-
-                   Temporarily disable child lock so the device will accept
-                   configuration commands
-                 sequence:
-                   - target:
-                       entity_id: switch.otto_dehumidifier_eeese_air_care_child_lock
-                     action: switch.turn_off
-                     data: {}
-                   - wait_for_trigger:
-                       - entity_id: switch.otto_dehumidifier_eeese_air_care_child_lock
-                         to: "off"
-                         trigger: state
-                     timeout: "00:00:05"
-                   - delay: "00:00:01"
-               default: []
-           # Step 5: Set humidifier target humidity
-           - alias: Set humidifier target humidity
-             target:
-               entity_id: humidifier.otto_dehumidifier_eeese_air_care
-             data:
-               humidity: "{{ desired_humidity | int }}"
-             action: humidifier.set_humidity
-           # Step 6: Update stored setpoint input_number
-           - alias: Update stored setpoint input_number
-             target:
-               entity_id: input_number.dehumidifier_setpoint
-             data:
-               value: "{{ desired_humidity | int }}"
-             action: input_number.set_value
-           # Step 7: Re-enable child lock if it was previously enabled
-           - choose:
-               - conditions:
-                   - condition: template
-                     value_template: "{{ was_locked | bool }}"
-                 alias: Re-enable child lock if it was previously enabled
-                 sequence:
-                   - target:
-                       entity_id: switch.otto_dehumidifier_eeese_air_care_child_lock
-                     action: switch.turn_on
-                     data: {}
-               default: []
+alias: Dehumidifier Control
+description: >
+  Turn off dehumidifier above 10°C. When 2..10°C, ensure it is on and set
+  humidity to a value (30..80%) linearly interpolated from outside temperature.
+triggers:
+  - entity_id: weather.forecast_home
+    trigger: state
+conditions:
+  - condition: template
+    value_template: >-
+      {% set old = trigger.from_state.attributes.temperature | float(0) %} {%
+      set new = trigger.to_state.attributes.temperature | float(0) %} {{ (old -
+      new) | abs >= 1 }}
+actions:
+  - choose:
+      - alias: Turn off humidifier when outside temperature > 10°C
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ state_attr('weather.forecast_home','temperature') | float(999)
+              > 10.0 }}
+        sequence:
+          - alias: Power off humidifier
+            target:
+              entity_id: humidifier.otto_dehumidifier_eeese_air_care
+            action: humidifier.turn_off
+            data: {}
+      - alias: >-
+          Ensure humidifier is on and set humidity when outside temperature is
+          between 2°C and 10°C
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ (state_attr('weather.forecast_home','temperature') |
+              float(-999) >= 2.0) and
+                  (state_attr('weather.forecast_home','temperature') | float(999) <= 10.0) }}
+          - condition: template
+            value_template: |-
+              {{ (states('input_number.dehumidifier_setpoint') | float(0) -
+                  ( state_attr('weather.forecast_home','temperature') | float(0) ) ) | abs >= 1 }}
+            alias: >-
+              Only proceed when the stored setpoint differs from outside
+              temperature by >= 1°C (prevents frequent small adjustments)
+        sequence:
+          - alias: Compute desired humidity and capture child-lock state
+            variables:
+              t: >-
+                {{ state_attr('weather.forecast_home','temperature') | float(0)
+                }}
+              t_min: 2
+              t_max: 10
+              h_min: 30
+              h_max: 80
+              desired_humidity: |-
+                {% if t <= t_min %}
+                  {{ h_min | round(0) }}
+                {% elif t >= t_max %}
+                  {{ h_max | round(0) }}
+                {% else %}
+                  {% set slope = (h_max - h_min) / (t_max - t_min) %}
+                  {{ (h_min + slope * (t - t_min)) | round(0) }}
+                {% endif %}
+              was_locked: >-
+                {{
+                is_state('switch.otto_dehumidifier_eeese_air_care_child_lock','on')
+                }}
+          - alias: Ensure humidifier is powered on
+            target:
+              entity_id: humidifier.otto_dehumidifier_eeese_air_care
+            action: humidifier.turn_on
+            data: {}
+          - alias: Wait for humidifier to report state 'on'
+            wait_for_trigger:
+              - entity_id: humidifier.otto_dehumidifier_eeese_air_care
+                to: "on"
+                trigger: state
+            timeout: "00:00:10"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ was_locked | bool }}"
+                alias: >-
+                  Temporarily disable child lock so the device will accept
+                  configuration commands
+                sequence:
+                  - target:
+                      entity_id: switch.otto_dehumidifier_eeese_air_care_child_lock
+                    action: switch.turn_off
+                    data: {}
+                  - wait_for_trigger:
+                      - entity_id: switch.otto_dehumidifier_eeese_air_care_child_lock
+                        to: "off"
+                        trigger: state
+                    timeout: "00:00:05"
+                  - delay: "00:00:01"
+            default: []
+          - alias: Set humidifier target humidity
+            target:
+              entity_id: humidifier.otto_dehumidifier_eeese_air_care
+            data:
+              humidity: "{{ desired_humidity | int }}"
+            action: humidifier.set_humidity
+          - alias: Update stored setpoint input_number
+            target:
+              entity_id: input_number.dehumidifier_setpoint
+            data:
+              value: "{{ desired_humidity | int }}"
+            action: input_number.set_value
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ was_locked | bool }}"
+                alias: Re-enable child lock if it was previously enabled
+                sequence:
+                  - target:
+                      entity_id: switch.otto_dehumidifier_eeese_air_care_child_lock
+                    action: switch.turn_on
+                    data: {}
+            default: []
