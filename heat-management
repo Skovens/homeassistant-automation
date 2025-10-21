@@ -1,21 +1,27 @@
 alias: New Heat management
 description: ""
-trigger:
-  - platform: template
-    # Watch the zone and helper entities; evaluate the template on changes
-    entity_id:
-      - zone.home
-      - zone.20km_zone
-      - input_boolean.home_pressence_detected
-      - switch.toggle_sleep_mode
-    value_template: >-
-      {{ (state_attr('zone.home','persons') | default([]) | length == 0)
-         or ((state_attr('zone.20km_zone','persons') | default([]) | length) > 0)
-         or is_state('input_boolean.home_pressence_detected','on')
-         or is_state('switch.toggle_sleep_mode','on') }}
+# Heat management automation: sets radiator temperatures based on presence, sleep mode, and zones
+triggers:
+  # Trigger: someone enters or leaves home zone
+  - entity_id: zone.home
+    trigger: state
+  # Trigger: someone enters or leaves 20km zone
+  - entity_id: zone.20km_zone
+    trigger: state
+  # Trigger: home presence helper changes
+  - entity_id: input_boolean.home_pressence_detected
+    trigger: state
+  # Trigger: sleep mode toggled on
+  - entity_id: switch.toggle_sleep_mode
+    from: "off"
+    to: "on"
+    trigger: state
 conditions: []
+  # No extra conditions
 actions:
+  # Choose block: set temperature based on presence, sleep mode, and zones
   - choose:
+      # If someone is home and not sleeping, set comfortable temperature
       - conditions:
           - condition: and
             conditions:
@@ -26,6 +32,7 @@ actions:
                 entity_id: input_boolean.home_pressence_detected
                 state: "on"
         sequence:
+          # Set temperature to 22°C (comfort)
           - action: climate.set_temperature
             metadata: {}
             data:
@@ -35,14 +42,13 @@ actions:
                 - climate.danfoss_etrv0100
                 - climate.danfoss_etrv0100_2
                 - climate.danfoss_etrv0100_3
-        # Action: power-set comfortable temperature on all target thermostats
         alias: Set comfortable temperature
-
+      # If someone is within 20km, but not home, and not sleeping, set idle temperature
       - conditions:
           - condition: template
-            # True when any person is currently registered in the 20km zone
             value_template: >-
-              {{ (state_attr('zone.20km_zone', 'persons') | default([])) | length > 0 }}
+              {{ (state_attr('zone.20km_zone', 'persons') | default([])) |
+              length > 0 }}
           - condition: and
             conditions:
               - condition: state
@@ -52,6 +58,7 @@ actions:
                 entity_id: input_boolean.home_pressence_detected
                 state: "off"
         sequence:
+          # Set temperature to 20°C (idle)
           - action: climate.set_temperature
             metadata: {}
             data:
@@ -61,9 +68,8 @@ actions:
                 - climate.danfoss_etrv0100_2
                 - climate.danfoss_etrv0100
                 - climate.danfoss_etrv0100_3
-        # Action: set idle temperature on all target thermostats
         alias: Set idle temperature
-
+      # If no one is home or in 20km zone, and not sleeping, set low temperature
       - conditions:
           - condition: state
             entity_id: zone.home
@@ -80,6 +86,7 @@ actions:
             entity_id: input_boolean.home_pressence_detected
             state: "off"
         sequence:
+          # Set temperature to 16°C (low)
           - action: climate.set_temperature
             metadata: {}
             data:
@@ -89,9 +96,8 @@ actions:
                 - climate.danfoss_etrv0100_2
                 - climate.danfoss_etrv0100
                 - climate.danfoss_etrv0100_3
-        # Action: set low/away temperature on all target thermostats
         alias: Set low temperature
-
+      # If someone is home and sleep mode is on, set sleep temperature
       - conditions:
           - condition: and
             conditions:
@@ -102,6 +108,7 @@ actions:
                 entity_id: switch.toggle_sleep_mode
                 state: "on"
         sequence:
+          # Set temperature to 19°C (sleep)
           - action: climate.set_temperature
             metadata: {}
             data:
@@ -111,7 +118,6 @@ actions:
                 - climate.danfoss_etrv0100_2
                 - climate.danfoss_etrv0100
                 - climate.danfoss_etrv0100_3
-        # Action: set sleep temperature on all target thermostats
         alias: Set sleep temperature
-
 mode: single
+# Only one instance runs at a time
