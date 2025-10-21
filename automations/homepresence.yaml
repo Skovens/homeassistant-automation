@@ -1,0 +1,116 @@
+alias: Home Presence
+# Main presence automation: toggles helper and manages timer based on sensors, group, and manual input
+description: >-
+  Toggle input_boolean.home_pressence_detected if anyone is home or if
+  motion/contact sensors are active.
+triggers:
+  # Trigger: anyone arrives home
+  - entity_id: group.all_persons
+    trigger: state
+  # Trigger: motion/contact sensors activate
+  - entity_id: binary_sensor.sensor_clothes_cupboard
+    from: "off"
+    to: "on"
+    trigger: state
+  - entity_id: binary_sensor.sensor_motion_hallway
+    from: "off"
+    to: "on"
+    trigger: state
+  - entity_id: binary_sensor.sensor_motion_staircase
+    from: "off"
+    to: "on"
+    trigger: state
+  - entity_id: binary_sensor.sensor_hallway_door
+    from: "off"
+    to: "on"
+    trigger: state
+  # Trigger: manual toggle of helper
+  - entity_id: input_boolean.home_pressence_detected
+    from: "off"
+    to: "on"
+    trigger: state
+  # Trigger: timer expiry
+  - event_type: timer.finished
+    event_data:
+      entity_id: timer.some_has_been_home_with_last_1_hour
+    trigger: event
+conditions: [] # No extra conditions
+actions:
+  # Choose block: handle presence, absence, timer expiry, and manual toggle
+  - choose:
+      # If anyone is home or any sensor is active, turn on helper and start timer
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: group.all_persons
+                state: home
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity_id: binary_sensor.sensor_clothes_cupboard
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.sensor_motion_hallway
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.sensor_motion_staircase
+                    state: "on"
+                  - condition: state
+                    entity_id: binary_sensor.sensor_hallway_door
+                    state: "on"
+        sequence:
+            - target:
+                entity_id: input_boolean.home_pressence_detected
+              action: input_boolean.turn_on
+              data: {}
+            - target:
+                entity_id: timer.some_has_been_home_with_last_1_hour
+              action: timer.start
+              data: {}
+      # If everyone is away and all sensors are off, turn off helper
+      - conditions:
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: group.all_persons
+                state: not_home
+              - condition: state
+                entity_id: binary_sensor.sensor_clothes_cupboard
+                state: "off"
+              - condition: state
+                entity_id: binary_sensor.sensor_motion_hallway
+                state: "off"
+              - condition: state
+                entity_id: binary_sensor.sensor_motion_staircase
+                state: "off"
+              - condition: state
+                entity_id: binary_sensor.sensor_hallway_door
+                state: "off"
+        sequence:
+          - target:
+              entity_id: input_boolean.home_pressence_detected
+            action: input_boolean.turn_off
+            data: {}
+      # If timer expires, turn off helper
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.platform == 'event' and trigger.event.data.entity_id ==
+              'timer.some_has_been_home_with_last_1_hour' }}
+        sequence:
+          - target:
+              entity_id: input_boolean.home_pressence_detected
+            action: input_boolean.turn_off
+            data: {}
+      # If helper is toggled on manually, always start timer
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.entity_id == 'input_boolean.home_pressence_detected' and trigger.to_state.state == 'on' }}
+        sequence:
+          - target:
+              entity_id: timer.some_has_been_home_with_last_1_hour
+            action: timer.start
+            data: {}
+mode: single # Only one instance runs at a time
