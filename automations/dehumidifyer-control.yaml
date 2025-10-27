@@ -2,7 +2,7 @@ alias: Dehumidifier Control
 # Controls dehumidifier based on outside temperature and optimizes humidity setpoint
 description: >
   Turn off dehumidifier above 10°C. When 2..10°C, ensure it is on and set
-  humidity to a value (30..80%) linearly interpolated from outside temperature.
+  humidity to a value (30..60%) linearly interpolated from outside temperature.
 triggers:
   # Trigger: outside temperature changes (via weather entity)
   - entity_id: weather.forecast_home
@@ -28,6 +28,21 @@ actions:
             target:
               entity_id: humidifier.otto_dehumidifier_eeese_air_care
             action: humidifier.turn_off
+            data: {}
+      # If outside temperature ≤ 10°C, ensure humidifier is on
+      - alias: Turn on humidifier when outside temperature ≤ 10°C
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ state_attr('weather.forecast_home','temperature') | float(999) <= 10.0 }}
+          - condition: state
+            entity_id: humidifier.otto_dehumidifier_eeese_air_care
+            state: 'off'
+        sequence:
+          - alias: Power on humidifier
+            target:
+              entity_id: humidifier.otto_dehumidifier_eeese_air_care
+            action: humidifier.turn_on
             data: {}
       # If outside temperature is 2–10°C, ensure humidifier is on and set humidity
       - alias: >-
@@ -58,7 +73,7 @@ actions:
               t_min: 2
               t_max: 10
               h_min: 30
-              h_max: 80
+              h_max: 60
               desired_humidity: |-
                 {% if t <= t_min %}
                   {{ h_min | round(0) }}
